@@ -15,24 +15,35 @@ const connection = snowflake.createConnection({
 
 const generateRandomHash = () => crypto.randomBytes(16).toString('hex');
 
-const generateRandomTimestampToday = () => {
-  const now = new Date(); 
+const generateRandomDateAndTimeToday = () => {
+  const now = new Date();
   const todayDate = new Date(now.toISOString().split('T')[0]);
+  
+  // Generate random time for the transaction
   const randomHour = chance.integer({ min: 0, max: 23 });
   const randomMinute = chance.integer({ min: 0, max: 59 });
   const randomSecond = chance.integer({ min: 0, max: 59 });
+  
   todayDate.setHours(randomHour, randomMinute, randomSecond, 0);
+
   const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(todayDate.getTime() + istOffset); 
-  return istTime.toISOString(); 
+  const istTime = new Date(todayDate.getTime() + istOffset);
+
+  // Split date and time
+  const datePart = istTime.toISOString().split('T')[0];
+  const timePart = istTime.toISOString().split('T')[1].split('Z')[0];
+
+  return { date: datePart, time: timePart };
 };
 
 const generateData = () => {
   const transactionId = generateRandomHash();
+  const { date, time } = generateRandomDateAndTimeToday();
   return {
     TRANSACTIONID: transactionId,
     TRANSACTIONAMOUNT: chance.floating({ min: 100, max: 10000 }),
-    TRANSACTIONDATE: generateRandomTimestampToday(), 
+    TRANSACTION_DATE: date,           
+    TRANSACTION_TIME: time,            
     TRANSACTIONTYPE: chance.pickone(['Debit', 'Credit', 'Transfer']),
     IPADDRESS: chance.ip(),
     CHANNEL: chance.pickone(['ATM', 'Online', 'POS']),
@@ -47,17 +58,19 @@ const generateData = () => {
 const insertData = (transactionValues, customerValues) => {
   const transactionSql = `
     INSERT INTO TRANSACTIONS (
-      TRANSACTIONID, TRANSACTIONAMOUNT, TRANSACTIONDATE, TRANSACTIONTYPE,
+      TRANSACTIONID, TRANSACTIONAMOUNT, TRANSACTION_DATE, TRANSACTION_TIME, TRANSACTIONTYPE,
       IPADDRESS, CHANNEL, CUSTOMERAGE, CUSTOMEROCCUPATION,
       TRANSACTIONDURATION, LOGINATTEMPTS, COUNTBALANCE
     )
-    VALUES ${transactionValues.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')};`;
+    VALUES ${transactionValues.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')};
+  `;
 
   const customerSql = `
     INSERT INTO CUSTOMERDETAILS (
       TRANSACTIONID, CUSTOMERAGE, CUSTOMEROCCUPATION, COUNTBALANCE
     )
-    VALUES ${customerValues.map(() => '(?, ?, ?, ?)').join(', ')};`;
+    VALUES ${customerValues.map(() => '(?, ?, ?, ?)').join(', ')};
+  `;
 
   const flatTransactionValues = transactionValues.flat();
   const flatCustomerValues = customerValues.flat();
@@ -65,28 +78,22 @@ const insertData = (transactionValues, customerValues) => {
   connection.execute({
     sqlText: transactionSql,
     binds: flatTransactionValues,
-    complete: (err, stmt, rows) => {
+    complete: (err) => {
       if (err) {
-        console.error('Failed to insert into TRANSACTIONS table:', err);
+        console.error(`[${new Date().toISOString()}] Failed to insert into TRANSACTIONS table:`, err);
       } else {
-        console.log('Successfully inserted into TRANSACTIONS table.');
+        console.log(`[${new Date().toISOString()}] Successfully inserted into TRANSACTIONS table.`);
 
         connection.execute({
           sqlText: customerSql,
           binds: flatCustomerValues,
-          complete: (err, stmt, rows) => {
+          complete: (err) => {
             if (err) {
-              console.error('Failed to insert into CUSTOMERDETAILS table:', err);
+              console.error(`[${new Date().toISOString()}] Failed to insert into CUSTOMERDETAILS table:`, err);
             } else {
-              console.log('Successfully inserted into CUSTOMERDETAILS table.');
+              console.log(`[${new Date().toISOString()}] Successfully inserted into CUSTOMERDETAILS table.`);
             }
-            connection.destroy((err) => {
-              if (err) {
-                console.error('Error closing connection:', err.message);
-              } else {
-                console.log('Connection closed successfully.');
-              }
-            });
+            closeConnection();
           },
         });
       }
@@ -103,7 +110,8 @@ const generateAndInsertData = () => {
     transactionValues.push([
       data.TRANSACTIONID,
       data.TRANSACTIONAMOUNT,
-      data.TRANSACTIONDATE,
+      data.TRANSACTION_DATE,    
+      data.TRANSACTION_TIME,    
       data.TRANSACTIONTYPE,
       data.IPADDRESS,
       data.CHANNEL,
@@ -125,11 +133,21 @@ const generateAndInsertData = () => {
   insertData(transactionValues, customerValues);
 };
 
-connection.connect((err, conn) => {
+const closeConnection = () => {
+  connection.destroy((err) => {
+    if (err) {
+      console.error(`[${new Date().toISOString()}] Error closing connection:`, err.message);
+    } else {
+      console.log(`[${new Date().toISOString()}] Connection closed successfully.`);
+    }
+  });
+};
+
+connection.connect((err) => {
   if (err) {
-    console.error('Unable to connect to Snowflake:', err.message);
+    console.error(`[${new Date().toISOString()}] Unable to connect to Snowflake:`, err.message);
   } else {
-    console.log('Successfully connected to Snowflake.');
+    console.log(`[${new Date().toISOString()}] Successfully connected to Snowflake.`);
     generateAndInsertData();
   }
 });
