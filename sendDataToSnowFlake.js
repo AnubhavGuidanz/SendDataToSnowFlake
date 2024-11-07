@@ -1,10 +1,8 @@
-const fs = require('fs');
 const snowflake = require('snowflake-sdk');
-const Chance = require('chance'); 
+const Chance = require('chance');
+const crypto = require('crypto');
 
-const chance = new Chance(); 
-
-const path = './transactionId.json';  
+const chance = new Chance();
 
 const connection = snowflake.createConnection({
   account: 'tb62936.ap-south-1',
@@ -12,50 +10,35 @@ const connection = snowflake.createConnection({
   password: 'Bic@2022',
   warehouse: 'BIC_SMALLWH',
   database: 'NORTHWINDDB',
-  schema: 'TRANSACTIONS',
+  schema: 'TRANSACTION',
 });
 
-const getCurrentTransactionId = () => {
-  try {
-    const data = fs.readFileSync(path, 'utf8');
-    return JSON.parse(data).lastTransactionId || 2600;
-  } catch (err) {
-    console.error('Error reading the file:', err);
-    return 2600;
-  }
-};
+const generateRandomHash = () => crypto.randomBytes(16).toString('hex');
 
-const updateTransactionId = (newId) => {
-  const data = JSON.stringify({ lastTransactionId: newId }, null, 2);
-  try {
-    fs.writeFileSync(path, data, 'utf8');
-    console.log(`Updated transaction ID to ${newId}`);
-  } catch (err) {
-    console.error('Error writing to the file:', err);
-  }
+const generateData = () => {
+  const transactionId = generateRandomHash();
+  return {
+    TRANSACTIONID: transactionId,
+    TRANSACTIONAMOUNT: chance.floating({ min: 100, max: 10000 }),
+    TRANSACTIONDATE: new Date().toISOString().split('T')[0],
+    TRANSACTIONTYPE: chance.pickone(['Debit', 'Credit', 'Transfer']),
+    IPADDRESS: chance.ip(),
+    CHANNEL: chance.pickone(['ATM', 'Online', 'POS']),
+    CUSTOMERAGE: chance.integer({ min: 18, max: 80 }),
+    CUSTOMEROCCUPATION: chance.pickone(['Student', 'Engineer', 'Doctor']),
+    TRANSACTIONDURATION: chance.integer({ min: 10, max: 200 }),
+    LOGINATTEMPTS: chance.integer({ min: 1, max: 5 }),
+    COUNTBALANCE: chance.floating({ min: 10000, max: 100000 })
+  };
 };
-
-const generateData = (transactionId) => ({
-  TRANSACTIONID: transactionId,  
-  TRANSACTIONAMOUNT: chance.floating({ min: 100, max: 10000 }),  
-  TRANSACTIONDATE: new Date().toISOString().split('T')[0],  
-  TRANSACTIONTYPE: chance.pickone(['Debit', 'Credit', 'Transfer']),  
-  IPADDRESS: chance.ip(),  
-  CHANNEL: chance.pickone(['ATM', 'Online', 'POS']),  
-  CUSTOMERAGE: chance.integer({ min: 0, max: 80 }),  
-  CUSTOMEROCCUPATION: chance.pickone(['Student', 'Engineer', 'Doctor']),
-  TRANSACTIONDURATION: chance.integer({ min: 10, max: 200 }),  
-  LOGINATTEMPTS: chance.integer({ min: 1, max: 5 }),  
-  COUNTBALANCE: chance.floating({ min: 10000, max: 100000 }),
-});
 
 const insertData = () => {
-  let transactionId = getCurrentTransactionId();
-  const values = [];
+  const transactionValues = [];
+  const customerValues = [];
 
   for (let i = 0; i < 50; i++) {
-    const data = generateData(transactionId++);
-    values.push([
+    const data = generateData();
+    transactionValues.push([
       data.TRANSACTIONID,
       data.TRANSACTIONAMOUNT,
       data.TRANSACTIONDATE,
@@ -66,40 +49,64 @@ const insertData = () => {
       data.CUSTOMEROCCUPATION,
       data.TRANSACTIONDURATION,
       data.LOGINATTEMPTS,
-      data.COUNTBALANCE,
+      data.COUNTBALANCE
+    ]);
+
+    customerValues.push([
+      data.TRANSACTIONID,
+      data.CUSTOMERAGE,
+      data.CUSTOMEROCCUPATION,
+      data.COUNTBALANCE
     ]);
   }
 
-  const sql = `
+  const transactionSql = `
     INSERT INTO TRANSACTIONS (
-      TRANSACTIONID, TRANSACTIONAMOUNT, TRANSACTIONDATE, TRANSACTIONTYPE, 
-      IPADDRESS, CHANNEL, CUSTOMERAGE, CUSTOMEROCCUPATION, 
+      TRANSACTIONID, TRANSACTIONAMOUNT, TRANSACTIONDATE, TRANSACTIONTYPE,
+      IPADDRESS, CHANNEL, CUSTOMERAGE, CUSTOMEROCCUPATION,
       TRANSACTIONDURATION, LOGINATTEMPTS, COUNTBALANCE
     )
-    VALUES ${values.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')};
+    VALUES ${transactionValues.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')};
+  `;
+  
+  const customerSql = `
+    INSERT INTO CUSTOMERDETAILS (
+      TRANSACTIONID, CUSTOMERAGE, CUSTOMEROCCUPATION, COUNTBALANCE
+    )
+    VALUES ${customerValues.map(() => '(?, ?, ?, ?)').join(', ')};
   `;
 
-  const flatValues = values.flat();
+  const flatTransactionValues = transactionValues.flat();
+  const flatCustomerValues = customerValues.flat();
 
   connection.execute({
-    sqlText: sql,
-    binds: flatValues,
+    sqlText: transactionSql,
+    binds: flatTransactionValues,
     complete: (err, stmt, rows) => {
       if (err) {
-        console.error('Failed to insert data:', err);
+        console.error('Failed to insert into TRANSACTIONS table:', err);
       } else {
-        console.log('Successfully inserted 50 rows.');
+        console.log('Successfully inserted into TRANSACTIONS table.');
+
+        connection.execute({
+          sqlText: customerSql,
+          binds: flatCustomerValues,
+          complete: (err, stmt, rows) => {
+            if (err) {
+              console.error('Failed to insert into CUSTOMER_DETAILS table:', err);
+            } else {
+              console.log('Successfully inserted into CUSTOMER_DETAILS table.');
+            }
+            connection.destroy((err) => {
+              if (err) {
+                console.error('Error closing connection:', err.message);
+              } else {
+                console.log('Connection closed successfully.');
+              }
+            });
+          },
+        });
       }
-
-      updateTransactionId(transactionId);
-
-      connection.destroy((err) => {
-        if (err) {
-          console.error('Error closing connection: ' + err.message);
-        } else {
-          console.log('Connection closed successfully.');
-        }
-      });
     },
   });
 };
@@ -107,9 +114,8 @@ const insertData = () => {
 connection.connect((err, conn) => {
   if (err) {
     console.error('Unable to connect to Snowflake:', err.message);
-    console.error('Error code:', err.code);
   } else {
     console.log('Successfully connected to Snowflake.');
-    insertData();  
+    insertData();
   }
 });
