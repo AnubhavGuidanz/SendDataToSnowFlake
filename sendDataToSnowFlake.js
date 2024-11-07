@@ -1,9 +1,11 @@
+const fs = require('fs');
 const snowflake = require('snowflake-sdk');
-const Chance = require('chance');  // Importing the Chance library
+const Chance = require('chance'); 
 
-const chance = new Chance(); // Create a new instance of Chance
+const chance = new Chance(); 
 
-// Snowflake configuration
+const path = './transactionId.json';  
+
 const connection = snowflake.createConnection({
   account: 'tb62936.ap-south-1',
   username: 'BICUser',
@@ -13,21 +15,39 @@ const connection = snowflake.createConnection({
   schema: 'TRANSACTIONS',
 });
 
-connection.connect((err, conn) => {
-  if (err) {
-    console.error('Unable to connect to Snowflake:', err.message);
-    console.error('Error code:', err.code);
-  } else {
-    console.log('Successfully connected to Snowflake.');
-    insertData();
+const getCurrentTransactionId = () => {
+  try {
+    const data = fs.readFileSync(path, 'utf8');
+    return JSON.parse(data).lastTransactionId || 2600;  
+  } catch (err) {
+    console.error('Error reading the file:', err);
+    return 2600;  
   }
+};
+
+const updateTransactionId = (newId) => {
+  const data = JSON.stringify({ lastTransactionId: newId }, null, 2);
+  fs.writeFileSync(path, data, 'utf8');
+};
+
+const generateData = (transactionId) => ({
+  TRANSACTIONID: transactionId,  
+  TRANSACTIONAMOUNT: chance.floating({ min: 100,max:10000 }),  
+  TRANSACTIONDATE: new Date().toISOString().split('T')[0],  
+  TRANSACTIONTYPE: chance.pickone(['Debit', 'Credit', 'Transfer']),  
+  IPADDRESS: chance.ip(),  
+  CHANNEL: chance.pickone(['ATM', 'Online', 'POS']),  
+  CUSTOMERAGE: chance.integer({ min: 0 ,max:80}),  
+  CUSTOMEROCCUPATION: chance.profession(),  
+  TRANSACTIONDURATION: chance.integer({min:10,max:200}),  
+  LOGINATTEMPTS: chance.integer({min:1,max:5}),  
+  COUNTBALANCE: chance.floating({min:10000,max:100000}),
 });
 
 const insertData = () => {
-  let transactionId = 2600;
+  let transactionId = getCurrentTransactionId();
   const values = [];
 
-  // Loop to generate 50 rows of data
   for (let i = 0; i < 50; i++) {
     const data = generateData(transactionId++);
     values.push([
@@ -45,7 +65,6 @@ const insertData = () => {
     ]);
   }
 
-  // SQL query for batch insert
   const sql = `
     INSERT INTO TRANSACTIONS (
       TRANSACTIONID, TRANSACTIONAMOUNT, TRANSACTIONDATE, TRANSACTIONTYPE, 
@@ -55,10 +74,8 @@ const insertData = () => {
     VALUES ${values.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')};
   `;
 
-  // Flatten the values array into a single array for binding
   const flatValues = values.flat();
 
-  // Execute the insert query in Snowflake
   connection.execute({
     sqlText: sql,
     binds: flatValues,
@@ -69,7 +86,8 @@ const insertData = () => {
         console.log('Successfully inserted 50 rows.');
       }
 
-      // Close the connection after insertion
+      updateTransactionId(transactionId);
+
       connection.destroy((err) => {
         if (err) {
           console.error('Error closing connection: ' + err.message);
@@ -81,17 +99,12 @@ const insertData = () => {
   });
 };
 
-// Ensure generateData uses the unique transaction ID
-const generateData = (transactionId) => ({
-  TRANSACTIONID: transactionId, // Unique transaction ID for each row
-  TRANSACTIONAMOUNT: chance.floating({ min: 100, max: 5000, fixed: 2 }), // Random transaction amount
-  TRANSACTIONDATE: new Date().toISOString().split('T')[0], // Current date in YYYY-MM-DD format
-  TRANSACTIONTYPE: chance.pickone(['Debit', 'Credit', 'Transfer']), // Random transaction type
-  IPADDRESS: chance.ip(), // Random IP address
-  CHANNEL: chance.pickone(['ATM', 'Online', 'POS']), // Random channel
-  CUSTOMERAGE: chance.integer({ min: 18, max: 100 }), // Random customer age
-  CUSTOMEROCCUPATION: chance.profession(), // Random occupation
-  TRANSACTIONDURATION: chance.integer({ min: 30, max: 300 }), // Random transaction duration
-  LOGINATTEMPTS: chance.integer({ min: 1, max: 5 }), // Random login attempts
-  COUNTBALANCE: chance.floating({ min: 1000, max: 50000, fixed: 2 }), // Random account balance
+connection.connect((err, conn) => {
+  if (err) {
+    console.error('Unable to connect to Snowflake:', err.message);
+    console.error('Error code:', err.code);
+  } else {
+    console.log('Successfully connected to Snowflake.');
+    insertData();  
+  }
 });

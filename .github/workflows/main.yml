@@ -2,22 +2,23 @@ name: Scheduled Refresh
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  
+    - cron: "0 */2 * * *"
+    workflow_dispatch:
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: '18.20.4'
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18.20.4"
 
-    - name: Install dependencies
-      run: npm install  
+      - name: Install dependencies
+        run: npm install
 
-    - name: Run the script
-      run: node sendDataToSnowFlake
+      - name: Run the script
+        run: node sendDataToSnowFlake
