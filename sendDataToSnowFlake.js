@@ -18,30 +18,35 @@ const connection = snowflake.createConnection({
 const getCurrentTransactionId = () => {
   try {
     const data = fs.readFileSync(path, 'utf8');
-    return JSON.parse(data).lastTransactionId || 2600;  
+    return JSON.parse(data).lastTransactionId || 2600;
   } catch (err) {
     console.error('Error reading the file:', err);
-    return 2600;  
+    return 2600;
   }
 };
 
 const updateTransactionId = (newId) => {
   const data = JSON.stringify({ lastTransactionId: newId }, null, 2);
-  fs.writeFileSync(path, data, 'utf8');
+  try {
+    fs.writeFileSync(path, data, 'utf8');
+    console.log(`Updated transaction ID to ${newId}`);
+  } catch (err) {
+    console.error('Error writing to the file:', err);
+  }
 };
 
 const generateData = (transactionId) => ({
   TRANSACTIONID: transactionId,  
-  TRANSACTIONAMOUNT: chance.floating({ min: 100,max:10000 }),  
+  TRANSACTIONAMOUNT: chance.floating({ min: 100, max: 10000 }),  
   TRANSACTIONDATE: new Date().toISOString().split('T')[0],  
   TRANSACTIONTYPE: chance.pickone(['Debit', 'Credit', 'Transfer']),  
   IPADDRESS: chance.ip(),  
   CHANNEL: chance.pickone(['ATM', 'Online', 'POS']),  
-  CUSTOMERAGE: chance.integer({ min: 0 ,max:80}),  
-  CUSTOMEROCCUPATION: chance.profession(),  
-  TRANSACTIONDURATION: chance.integer({min:10,max:200}),  
-  LOGINATTEMPTS: chance.integer({min:1,max:5}),  
-  COUNTBALANCE: chance.floating({min:10000,max:100000}),
+  CUSTOMERAGE: chance.integer({ min: 0, max: 80 }),  
+  CUSTOMEROCCUPATION: chance.pickone(['Student', 'Engineer', 'Doctor']),
+  TRANSACTIONDURATION: chance.integer({ min: 10, max: 200 }),  
+  LOGINATTEMPTS: chance.integer({ min: 1, max: 5 }),  
+  COUNTBALANCE: chance.floating({ min: 10000, max: 100000 }),
 });
 
 const insertData = () => {
