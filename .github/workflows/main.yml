@@ -3,9 +3,10 @@ name: Scheduled Refresh
 on:
   schedule:
     - cron: "0 */2 * * *"
-    workflow_dispatch:
+  workflow_dispatch:
+
 jobs:
-  refresh-data:
+  sendData:
     runs-on: ubuntu-latest
 
     steps:
