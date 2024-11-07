@@ -25,7 +25,7 @@ const generateData = () => {
     IPADDRESS: chance.ip(),
     CHANNEL: chance.pickone(['ATM', 'Online', 'POS']),
     CUSTOMERAGE: chance.integer({ min: 18, max: 80 }),
-    CUSTOMEROCCUPATION: chance.pickone(['Student', 'Engineer', 'Doctor']),
+    CUSTOMEROCCUPATION: chance.pickone(['Student', 'Engineer', 'Doctor','Retired','Buisness','Pilot','Bank Manager','ShopKeeper','Agent']),
     TRANSACTIONDURATION: chance.integer({ min: 10, max: 200 }),
     LOGINATTEMPTS: chance.integer({ min: 1, max: 5 }),
     COUNTBALANCE: chance.floating({ min: 10000, max: 100000 })
