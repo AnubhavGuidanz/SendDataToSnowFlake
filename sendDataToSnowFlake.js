@@ -14,18 +14,17 @@ const connection = snowflake.createConnection({
 });
 
 const generateRandomHash = () => crypto.randomBytes(16).toString('hex');
-
 const generateTimestampCurrentDate = () => {
   const now = new Date(); 
-  const todayDate = new Date(now.toISOString().split('T')[0]);
-  const randomHour = chance.integer({ min: 0, max: 23 });
-  const randomMinute = chance.integer({ min: 0, max: 59 });
-  const randomSecond = chance.integer({ min: 0, max: 59 });
-  todayDate.setHours(randomHour, randomMinute, randomSecond, 0);
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(todayDate.getTime() + istOffset); 
-  return istTime.toISOString(); 
+  const todayDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const randomHour = Math.floor(Math.random() * 24);
+  const randomMinute = Math.floor(Math.random() * 60);
+  const randomSecond = Math.floor(Math.random() * 60);
+  todayDate.setUTCHours(randomHour, randomMinute, randomSecond, 0);
+
+  return todayDate.toISOString(); 
 };
+
 
 const generateData = () => {
   const transactionId = generateRandomHash();
